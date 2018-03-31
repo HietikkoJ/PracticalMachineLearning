@@ -1,0 +1,129 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "J. Hietikko"
+output: html_document
+---
+## Summary
+
+This report is part of the Practical Machine Learning Course. The assignment is to use different machine learning models to predict outcome of the different ways of barbell lifts.
+
+The training data:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+### Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+
+## Data loading and cleaning
+```{r, message=FALSE}
+# Load packages
+library(caret)
+
+# Read the data
+training <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"))
+testing  <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"))
+
+
+# Cleaning
+# Get column names with NA
+na_columns <- colnames(training[, colSums(is.na(training)) > 0])
+
+# Get column namess with empty values
+emptyVal_columns <- colnames(training[, colSums(training[,]== "", na.rm = TRUE) > 0])
+
+# Pick names of the fist seven columns with only indexing values
+index_columns <- colnames(training[,1:7])
+
+# Remove columns from the datasets
+training <- training[ , -which(names(training) %in% c(na_columns,emptyVal_columns,index_columns))]
+testing <- testing[ , -which(names(testing) %in% c(na_columns,emptyVal_columns,index_columns))]
+
+```
+
+
+## Data splitting
+
+Split the data into training, testing and validation subsets.
+
+```{r}
+set.seed(125)
+inBuild  <- createDataPartition(training$classe, p=0.9, list=FALSE)
+
+buildData <- training[inBuild, ]
+validation <- training[-inBuild, ]
+
+inTrain <- createDataPartition(buildData$classe, p=0.7, list=FALSE)
+
+SubTrain <- buildData[inTrain, ]
+SubTest  <- buildData[-inTrain, ]
+```
+
+Check the dataset dimensions
+```{r}
+dim(SubTrain)
+dim(SubTest)
+dim(validation)
+```
+
+## Prediction models
+
+We will be using two different prediction modelling methods: Random Forest and Generalized Boosted Model.
+
+Control parameters:
+```{r}
+control <- trainControl(method="cv", number=2) # K-fold cross-validation, 2-folds (saves calculation time)
+```
+
+
+### Random Forest
+```{r}
+set.seed(125)
+modelFitRandForest <- train(classe~ .,data=SubTrain,method="rf", trControl=control)
+
+# prediction on testing subdata
+predictRandForest <- predict(modelFitRandForest, newdata=SubTest)
+cMatrixRandForest <- confusionMatrix(predictRandForest, SubTest$classe)
+cMatrixRandForest
+
+# Accuracy of the Random Forest
+cMatrixRandForest$overall[1]
+```
+
+
+
+### Generalized Boosted Model
+```{r}
+set.seed(125)
+modelFitGbm  <- train(classe ~ ., data=SubTrain, method = "gbm", trControl = control, verbose = FALSE)
+
+# prediction on testing subdata
+predictGbm <- predict(modelFitGbm, newdata=SubTest)
+cMatixGbm <- confusionMatrix(predictGbm, SubTest$classe)
+cMatixGbm
+
+# Accuracy of the Generalized Boosted Model
+cMatixGbm$overall[1]
+```
+
+## Model selection and validation
+
+We will be selecting the Random Forest over Generalized Boosted Model because in this case Random Forest had better accuracy.  
+<br />
+
+We can get the estimate for out of sample error by using validation dataset
+```{r}
+predictValidation <- predict(modelFitRandForest, newdata=validation)
+cMatrixValidation <- confusionMatrix(predictValidation, validation$classe)
+cMatrixValidation
+```
+
+
+## Use the selected model for course testing data
+```{r}
+predict(modelFitRandForest, newdata=testing)
+```
